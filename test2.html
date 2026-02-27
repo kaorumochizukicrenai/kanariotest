@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>施術1〜3回目シミュレーター（1枚出力・テスト）</title>
+  <style>
+    :root { --bg:#f4f6f8; --card:#fff; --text:#222; --muted:#666; --blue:#007aff; }
+    body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans JP",sans-serif; background:var(--bg); color:var(--text); }
+    .wrap{ max-width:980px; margin:0 auto; padding:16px; }
+    h1{ text-align:center; font-size:22px; margin:10px 0 16px; }
+    .grid{ display:grid; grid-template-columns:1fr; gap:12px; }
+    .card{ background:var(--card); border-radius:12px; padding:16px; box-shadow:0 2px 10px rgba(0,0,0,.08); }
+    label{ display:block; font-size:13px; font-weight:700; margin-top:10px; }
+    input, select, button{ width:100%; box-sizing:border-box; padding:10px; border-radius:10px; border:1px solid #cfcfcf; font-size:16px; margin-top:6px; }
+    .row{ display:grid; grid-template-columns:1fr; gap:10px; }
+    button{ background:var(--blue); color:#fff; border:none; cursor:pointer; font-weight:700; padding:12px; }
+    button:disabled{ background:#9aa3ad; cursor:not-allowed; }
+    .status{ font-size:13px; color:var(--muted); margin-top:10px; text-align:center; min-height:18px; }
+    .headline{ background:#eaf2ff; border:1px solid #cfe2ff; color:#0b3d91; padding:10px 12px; border-radius:10px; font-weight:800; }
+    .images{ display:grid; grid-template-columns:1fr; gap:12px; }
+    .imgbox{ text-align:center; }
+    .imgbox p{ margin:6px 0 10px; font-weight:700; }
+    .imgbox img{ width:100%; border-radius:12px; background:#eee; }
+    .tips{ font-size:12px; color:var(--muted); line-height:1.5; }
+
+    @media (min-width: 860px){
+      .grid{ grid-template-columns: 360px 1fr; align-items:start; }
+      .row{ grid-template-columns: 1fr 1fr; }
+      .images{ grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>施術1〜3回目シミュレーター（1枚出力・テスト版）</h1>
+
+    <div class="grid">
+      <div class="card">
+        <div class="headline">あなたは2回目程度から効果があらわれはじめます！</div>
+
+        <label>OpenAI API Key</label>
+        <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+
+        <label>モデル名</label>
+        <input id="model" value="gpt-image-1-mini" />
+
+        <label>部位の写真（スマホ撮影OK / 1人前提）</label>
+        <input id="imageInput" type="file" accept="image/*" capture="environment" />
+
+        <div class="row">
+          <div>
+            <label>年齢</label>
+            <input id="age" type="number" inputmode="numeric" min="0" max="120" placeholder="例：28" />
+          </div>
+          <div>
+            <label>性別</label>
+            <select id="gender">
+              <option value="male">男</option>
+              <option value="female">女</option>
+              <option value="other">その他</option>
+            </select>
+          </div>
+        </div>
+
+        <label>これまでの自己処理回数（ざっくり）</label>
+        <select id="shaveCount">
+          <option value="low">少ない（0〜10回くらい）</option>
+          <option value="mid">普通（11〜50回くらい）</option>
+          <option value="high">多い（51回以上）</option>
+        </select>
+
+        <button id="generateBtn">1枚にまとめて生成（1回目〜3回目）</button>
+        <div class="status" id="status"></div>
+
+        <div class="tips">
+          ※テスト用途：結果はイメージです（嘘OK仕様）<br/>
+          ※人物や部位が複数写る写真は動作保証外
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="images">
+          <div class="imgbox">
+            <p>元画像</p>
+            <img id="originalPreview" alt="original" />
+          </div>
+          <div class="imgbox">
+            <p>生成結果（1回目 / 2回目 / 3回目 を1枚に）</p>
+            <img id="collage" alt="collage" />
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const imageInput = document.getElementById("imageInput");
+  const originalPreview = document.getElementById("originalPreview");
+  const collage = document.getElementById("collage");
+  const btn = document.getElementById("generateBtn");
+  const statusEl = document.getElementById("status");
+
+  let selectedFile = null;
+
+  imageInput.addEventListener("change", () => {
+    selectedFile = imageInput.files?.[0] || null;
+    if (!selectedFile) return;
+
+    const r = new FileReader();
+    r.onload = (e) => { originalPreview.src = e.target.result; };
+    r.readAsDataURL(selectedFile);
+
+    collage.removeAttribute("src");
+  });
+
+  async function callImageEdit({ apiKey, model, file, prompt }) {
+    const form = new FormData();
+    form.append("model", model);
+    form.append("prompt", prompt);
+    form.append("image", file);
+
+    const res = await fetch("https://api.openai.com/v1/images/edits", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + apiKey },
+      body: form
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data?.data?.[0]?.b64_json) {
+      throw new Error(data?.error?.message || JSON.stringify(data));
+    }
+
+    return "data:image/png;base64," + data.data[0].b64_json;
+  }
+
+  function buildCollagePrompt({ age, gender, shaveCount }) {
+    const genderJP = gender === "male" ? "男性" : gender === "female" ? "女性" : "人物";
+    const shaveJP = shaveCount === "low" ? "自己処理は少なめ" : shaveCount === "mid" ? "自己処理は普通" : "自己処理は多め";
+
+    // 重要：1枚の中に3コマを作る構図指示を強める
+    return `
+あなたは美容施術の経過シミュレーション画像を生成するAIです。
+入力画像と同一人物・同一部位・同一構図・同一背景を維持してください。
+出力は「1枚の画像」の中に、左から右に3つのパネル（3分割）を並べたコラージュにしてください。
+各パネルは同じサイズ・同じアングルで、違いは体毛の減り方だけにしてください。
+
+パネル構成（左→右）:
+(1) 施術1回目相当：見た目はほぼ現状維持だが、わずかに毛が減った/細くなった印象
+(2) 施術2回目相当：毛量が減ってまばらになり、細く薄くなる（2回目あたりから効果が見え始める印象）
+(3) 施術3回目相当：さらに毛量が減り、かなりスッキリした見た目。ただし肌質は自然でリアル
+
+共通条件:
+- 被写体: ${genderJP}
+- 年齢: ${age ? age + "歳" : "不明"}
+- 自己処理: ${shaveJP}
+- 過度な美肌加工、別人化、体型変更、衣服変更、背景変更はしない
+- 光、色味、影、画質を揃える
+- テキストやロゴや透かしは入れない
+
+出力仕様:
+- 1枚の画像
+- 3分割（左:1回目 / 中:2回目 / 右:3回目）
+- 3パネルの境界が分かるように、細い区切り線か余白を入れる（派手すぎない）
+`;
+  }
+
+  btn.addEventListener("click", async () => {
+    const apiKey = document.getElementById("apiKey").value.trim();
+    const model = document.getElementById("model").value.trim();
+    const age = document.getElementById("age").value.trim();
+    const gender = document.getElementById("gender").value;
+    const shaveCount = document.getElementById("shaveCount").value;
+
+    if (!apiKey) { alert("APIキーを入力してください"); return; }
+    if (!selectedFile) { alert("画像を選択してください"); return; }
+    if (!model) { alert("モデル名を入力してください"); return; }
+
+    btn.disabled = true;
+    statusEl.textContent = "生成中...（1回の生成で3分割画像を作ります）";
+
+    try {
+      const prompt = buildCollagePrompt({ age, gender, shaveCount });
+      const url = await callImageEdit({ apiKey, model, file: selectedFile, prompt });
+      collage.src = url;
+      statusEl.textContent = "生成完了 ✅（1枚に 1回目/2回目/3回目）";
+    } catch (e) {
+      console.error(e);
+      statusEl.textContent = "エラー: " + (e?.message || String(e));
+      alert("生成に失敗しました。\n" + (e?.message || String(e)));
+    } finally {
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
