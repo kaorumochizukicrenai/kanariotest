@@ -1,1 +1,36 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KanaLio - 顧客管理システム (Styled Mock)</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header id="app-header">
+        <div class="logo" onclick="app.navigate('home')">KanaLio</div>
+        <div class="menu-btn" onclick="app.toggleMenu()">☰</div>
+    </header>
 
+    <nav id="app-menu">
+        <ul>
+            <li onclick="app.navigate('home')">ホーム</li>
+            <li onclick="app.navigate('reservation-list')">予約管理</li>
+            <li onclick="app.navigate('customer-list')">顧客管理</li>
+            <li onclick="app.navigate('settings')">予約設定</li>
+            <li onclick="app.navigate('profile')">ログイン情報変更</li>
+            <li onclick="app.logout()">ログアウト</li>
+        </ul>
+    </nav>
+
+    <main id="app-main">
+        <!-- 画面コンテンツがここに挿入される -->
+    </main>
+
+    <footer id="app-footer">
+        <div>&copy; 2026 KanaLio - プロフェッショナル顧客管理システム</div>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>
